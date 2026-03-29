@@ -7,7 +7,7 @@ RUN --mount=type=cache,id=go-mod,target=/go/pkg/mod \
 COPY . .
 RUN --mount=type=cache,id=go-build,target=/root/.cache/go-build \
     --mount=type=cache,id=go-mod,target=/go/pkg/mod \
-    go build .
+    go build -v -ldflags="-s -w" -o app .
 
 FROM debian:trixie-slim AS runner
 
@@ -16,6 +16,6 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /src/edgeone-sls-push /usr/local/bin/edgeone-sls-push
+COPY --from=builder /src/app /usr/local/bin/app
 EXPOSE 8080
-ENTRYPOINT ["/usr/bin/tini", "--"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/app"]
