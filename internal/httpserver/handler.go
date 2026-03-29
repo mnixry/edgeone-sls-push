@@ -5,12 +5,9 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/mnixry/edgeone-sls-push/internal/edgeone"
+	"github.com/mnixry/edgeone-sls-push/internal/sls"
 	"github.com/rs/zerolog"
 )
-
-type LogForwarder interface {
-	Enqueue(timestamp uint32, record map[string]string) error
-}
 
 type Response struct {
 	ResultCode string `json:"result_code"`
@@ -20,13 +17,13 @@ type Response struct {
 
 type Handler struct {
 	auth *edgeone.AuthVerifier
-	fwd  LogForwarder
+	fwd  *sls.Forwarder
 	log  zerolog.Logger
 }
 
 func NewHandler(
 	auth *edgeone.AuthVerifier,
-	fwd LogForwarder,
+	fwd *sls.Forwarder,
 	log zerolog.Logger,
 ) *Handler {
 	return &Handler{
@@ -54,20 +51,27 @@ func (h *Handler) Handle(c fiber.Ctx) error {
 		return errResponse(c, fiber.StatusUnauthorized, "unauthorized")
 	}
 
-	body := c.Body()
-
-	rec, err := edgeone.ParseRecord(body)
+	records, err := edgeone.ParseRecords(c.Body())
 	if err != nil {
 		h.log.Warn().Err(err).Msg("parse failed")
 		return errResponse(c, fiber.StatusBadRequest, "malformed JSON body")
 	}
-	h.log.Debug().Str("ip", c.IP()).Interface("record", rec).Msg("record accepted")
 
-	timestamp := uint32(time.Now().Unix())
-	if parsed, err := time.Parse(time.RFC3339, rec.LogTime); err == nil {
-		timestamp = uint32(parsed.Unix())
+	entries := make([]sls.LogEntry, 0, len(records))
+	for _, rec := range records {
+		ts := uint32(time.Now().Unix())
+		if parsed, parseErr := time.Parse(time.RFC3339, rec.LogTime); parseErr == nil {
+			ts = uint32(parsed.Unix())
+		}
+		entries = append(entries, sls.LogEntry{Timestamp: ts, Fields: rec.Normalize()})
 	}
-	if err := h.fwd.Enqueue(timestamp, rec.Normalize()); err != nil {
+
+	h.log.Info().
+		Str("remote", c.IP()).
+		Int("records", len(entries)).
+		Msg("forwarding batch")
+
+	if err := h.fwd.Enqueue(entries); err != nil {
 		h.log.Error().Err(err).Msg("enqueue to SLS failed")
 		return errResponse(c, fiber.StatusInternalServerError, "internal error")
 	}

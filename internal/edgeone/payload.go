@@ -1,6 +1,7 @@
 package edgeone
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 )
@@ -27,21 +28,32 @@ func tryCastAndPopulate[T any](m map[string]any, key string, t *T) (err error) {
 	return nil
 }
 
-func ParseRecord(data []byte) (*LogRecord, error) {
-	record := &LogRecord{}
-	if err := json.Unmarshal(data, &record.Fields); err != nil {
-		return nil, err
+// ParseRecords reads one or more JSON objects from data (single JSON or JSON Lines)
+// using Go's streaming decoder, so both formats work without special handling.
+func ParseRecords(data []byte) ([]*LogRecord, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	var records []*LogRecord
+	for dec.More() {
+		var fields map[string]any
+		if err := dec.Decode(&fields); err != nil {
+			return nil, fmt.Errorf("json decode: %w", err)
+		}
+		rec := &LogRecord{Fields: fields}
+		if err := tryCastAndPopulate(fields, "RequestID", &rec.RequestID); err != nil {
+			return nil, err
+		}
+		if err := tryCastAndPopulate(fields, "LogTime", &rec.LogTime); err != nil {
+			return nil, err
+		}
+		if err := tryCastAndPopulate(fields, "ContentID", &rec.ContentID); err != nil {
+			return nil, err
+		}
+		records = append(records, rec)
 	}
-	if err := tryCastAndPopulate(record.Fields, "RequestID", &record.RequestID); err != nil {
-		return nil, err
+	if len(records) == 0 {
+		return nil, fmt.Errorf("empty body")
 	}
-	if err := tryCastAndPopulate(record.Fields, "LogTime", &record.LogTime); err != nil {
-		return nil, err
-	}
-	if err := tryCastAndPopulate(record.Fields, "ContentID", &record.ContentID); err != nil {
-		return nil, err
-	}
-	return record, nil
+	return records, nil
 }
 
 func (r *LogRecord) Normalize() map[string]string {
@@ -55,8 +67,8 @@ func (r *LogRecord) Normalize() map[string]string {
 		case string:
 			normalized[k] = v
 		default:
-			if json, err := json.Marshal(v); err == nil {
-				normalized[k] = string(json)
+			if b, err := json.Marshal(v); err == nil {
+				normalized[k] = string(b)
 			}
 		}
 	}
