@@ -5,6 +5,7 @@ go 1.26.1
 require (
 	github.com/alecthomas/kong v1.14.0
 	github.com/aliyun/aliyun-log-go-sdk v0.1.117
+	github.com/go-kit/log v0.2.1
 	github.com/gofiber/fiber/v3 v3.1.0
 	github.com/rs/zerolog v1.35.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
@@ -17,7 +18,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dennwc/varint v1.0.0 // indirect
 	github.com/go-kit/kit v0.13.0 // indirect
-	github.com/go-kit/log v0.2.1 // indirect
 	github.com/go-logfmt/logfmt v0.6.1 // indirect
 	github.com/gofiber/schema v1.7.0 // indirect
 	github.com/gofiber/utils/v2 v2.0.2 // indirect

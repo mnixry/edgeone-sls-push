@@ -5,6 +5,7 @@ import (
 
 	sls "github.com/aliyun/aliyun-log-go-sdk"
 	"github.com/aliyun/aliyun-log-go-sdk/producer"
+	"github.com/mnixry/edgeone-sls-push/internal/logger"
 	"github.com/rs/zerolog"
 )
 
@@ -22,6 +23,11 @@ type Config struct {
 	Retries         int
 	BaseRetryMs     int64
 	MaxRetryMs      int64
+}
+
+type LogEntry struct {
+	Timestamp uint32
+	Fields    map[string]string
 }
 
 type Forwarder struct {
@@ -58,6 +64,7 @@ func NewForwarder(cfg Config, log zerolog.Logger) (*Forwarder, error) {
 	pc.Endpoint = cfg.Endpoint
 	pc.AccessKeyID = cfg.AccessKeyID
 	pc.AccessKeySecret = cfg.AccessKeySecret
+	pc.Logger = logger.NewZerologKitBridge(log.With().Str("component", "sls-sdk").Logger())
 	pc.LingerMs = cfg.LingerMs
 	if cfg.MaxBatchSize > 0 {
 		pc.MaxBatchSize = cfg.MaxBatchSize
@@ -91,11 +98,18 @@ func NewForwarder(cfg Config, log zerolog.Logger) (*Forwarder, error) {
 	}, nil
 }
 
-func (f *Forwarder) Enqueue(timestamp uint32, record map[string]string) error {
+// Enqueue sends a batch of log entries into the producer pipeline.
+func (f *Forwarder) Enqueue(entries []LogEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
 	cb := &logCallback{log: f.log}
-	entry := producer.GenerateLog(timestamp, record)
-	return f.producer.SendLogWithCallBack(
-		f.project, f.logStore, f.topic, f.source, entry, cb,
+	logs := make([]*sls.Log, 0, len(entries))
+	for _, e := range entries {
+		logs = append(logs, producer.GenerateLog(e.Timestamp, e.Fields))
+	}
+	return f.producer.SendLogListWithCallBack(
+		f.project, f.logStore, f.topic, f.source, logs, cb,
 	)
 }
 
