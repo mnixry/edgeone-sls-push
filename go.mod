@@ -6,7 +6,6 @@ require (
 	github.com/alecthomas/kong v1.14.0
 	github.com/aliyun/aliyun-log-go-sdk v0.1.117
 	github.com/gofiber/fiber/v3 v3.1.0
-	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/rs/zerolog v1.35.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
