@@ -9,10 +9,17 @@ import (
 	"github.com/rs/zerolog"
 )
 
+type ResultCode string
+
+const (
+	ResultCodeSuccess ResultCode = "1"
+	ResultCodeError   ResultCode = "-1"
+)
+
 type Response struct {
-	ResultCode string `json:"result_code"`
-	ResultDesc string `json:"result_desc"`
-	Timestamp  int64  `json:"timestamp"`
+	ResultCode ResultCode `json:"result_code"`
+	ResultDesc string     `json:"result_desc"`
+	Timestamp  int64      `json:"timestamp"`
 }
 
 type Handler struct {
@@ -35,7 +42,7 @@ func NewHandler(
 
 func errResponse(c fiber.Ctx, status int, desc string) error {
 	return c.Status(status).JSON(Response{
-		ResultCode: "-1",
+		ResultCode: ResultCodeError,
 		ResultDesc: desc,
 		Timestamp:  time.Now().Unix(),
 	})
@@ -57,6 +64,11 @@ func (h *Handler) Handle(c fiber.Ctx) error {
 		return errResponse(c, fiber.StatusBadRequest, "malformed JSON body")
 	}
 
+	h.log.Debug().
+		Str("remote", c.IP()).
+		Interface("records", records).
+		Msg("forwarding batch")
+
 	entries := make([]sls.LogEntry, 0, len(records))
 	for _, rec := range records {
 		ts := uint32(time.Now().Unix())
@@ -66,18 +78,13 @@ func (h *Handler) Handle(c fiber.Ctx) error {
 		entries = append(entries, sls.LogEntry{Timestamp: ts, Fields: rec.Normalize()})
 	}
 
-	h.log.Info().
-		Str("remote", c.IP()).
-		Int("records", len(entries)).
-		Msg("forwarding batch")
-
 	if err := h.fwd.Enqueue(entries); err != nil {
 		h.log.Error().Err(err).Msg("enqueue to SLS failed")
 		return errResponse(c, fiber.StatusInternalServerError, "internal error")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(Response{
-		ResultCode: "1",
+		ResultCode: ResultCodeSuccess,
 		ResultDesc: "Success",
 		Timestamp:  time.Now().Unix(),
 	})
